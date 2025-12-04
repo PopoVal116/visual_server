@@ -3,7 +3,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#define PORT 8080
+#define PORT 12345
 
 int main(int argc, char const* argv[])
 {
@@ -30,10 +30,13 @@ int main(int argc, char const* argv[])
         return -1;
     }
 
-    send(client_fd, hello, strlen(hello), 0);
-    printf("Hello message sent\n");
-    valread = read(client_fd, buffer, 1024 - 1);
-    printf("%s\n", buffer);
+    for (int i = 1; i <= 10; i++) {
+        char message[50];
+        sprintf(message, "Hello from client #%d", i);
+        send(client_fd, message, strlen(message), 0);
+        printf("Message %d sent\n", i);
+        sleep(1);
+    }
 
     close(client_fd);
     return 0;
