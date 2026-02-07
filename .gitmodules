@@ -1,3 +1,9 @@
 [submodule "android_client"]
 	path = android_client
 	url = https://github.com/PopoVal116/visual_programming.git
+[submodule "cpp_server/third_party/imgui"]
+	path = cpp_server/third_party/imgui
+	url = https://github.com/ocornut/imgui
+[submodule "cpp_server/third_party/implot"]
+	path = cpp_server/third_party/implot
+	url = https://github.com/epezent/implot
