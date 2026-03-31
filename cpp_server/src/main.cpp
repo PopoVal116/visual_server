@@ -14,9 +14,10 @@
 #include <sstream>
 #include <vector>
 #include <string>
-
+#include <deque>
 
 using namespace std;
+double server_start_time = 0.0;
 
 /*
 struct location
@@ -28,12 +29,24 @@ struct location
     location() : lat(0), lon(0), alt(0), time(0) {}
 };*/
 
-struct DeviceData {
+struct DeviceData
+{
     double lat = 0, lon = 0, alt = 0, time = 0, accuracy = 0;
     string cell_info = "нет данных";
     long long tx_bytes = 0, rx_bytes = 0;
     string top_apps = "недоступно";
 };
+
+struct SignalPoint
+{
+    double time = 0.0;
+    double rsrp = 0.0;
+    double rssi = 0.0;
+    double rsrq = 0.0;
+};
+
+deque<SignalPoint> signal_history;
+constexpr size_t MAX_HISTORY = 300;
 
 void zmq_server(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
 {
@@ -79,50 +92,108 @@ void zmq_server(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
             char cell_buf[4096] = {0};
             long long tx = 0, rx = 0;
             char top_buf[2048] = {0};
+            double rsrp = 0.0;
+            double rssi = 0.0;
+            double rsrq = 0.0;
 
             size_t loc_pos = data.find("LOC:");
-            if (loc_pos != string::npos) { 
+            if (loc_pos != string::npos)
+            {
                 int loc_parsed = sscanf(data.c_str() + loc_pos, "LOC:%lf,%lf,%lf,%lf,%lf;",
-                            &lat, &lon, &alt, &time, &accuracy);
+                                        &lat, &lon, &alt, &time, &accuracy);
                 if (loc_parsed == 5)
-            {size_t cell_pos = data.find("CELL:");
-                size_t traf_pos = data.find("TRAFFIC:");
-                size_t top_pos  = data.find("TOP_APPS:");
-
-                if (cell_pos != string::npos)
-                {size_t start = cell_pos + 5;
-                    size_t end = data.find(";", start);
-                    if (end == string::npos) end = data.size();
-                    string cell_str = data.substr(start, end - start);
-                    strncpy(cell_buf, cell_str.c_str(), sizeof(cell_buf)-1);
-                    cell_buf[sizeof(cell_buf)-1] = '\0';
-                }
-
-                if (traf_pos != string::npos)
                 {
-                    sscanf(data.c_str() + traf_pos + 8, "%lld,%lld", &tx, &rx);
-                }
+                    size_t cell_pos = data.find("CELL:");
+                    size_t traf_pos = data.find("TRAFFIC:");
+                    size_t top_pos = data.find("TOP_APPS:");
 
-                if (top_pos != string::npos)
-                {
-                    size_t start = top_pos + 9;
-                    size_t end = data.find(";", start);
-                    if (end == string::npos) end = data.size();
-                    string top_str = data.substr(start, end - start);
-                    strncpy(top_buf, data.c_str() + start, sizeof(top_buf)-1);
-                    top_buf[sizeof(top_buf)-1] = '\0';
-                }
+                    if (cell_pos != string::npos)
+                    {
+                        size_t start = cell_pos + 5;
+                        size_t end = data.find("TRAFFIC:", start);
+                        if (end == string::npos)
+                            end = data.size();
+                        string cell_str = data.substr(start, end - start);
 
-                lock_guard<mutex> lock(*mtx);
-                dev_data->lat = lat;
-                dev_data->lon = lon;
-                dev_data->alt = alt;
-                dev_data->time = time;
-                dev_data->accuracy = accuracy;
-                dev_data->cell_info = cell_buf;
-                dev_data->tx_bytes = tx;
-                dev_data->rx_bytes = rx;
-                dev_data->top_apps = top_buf;
+                        strncpy(cell_buf, cell_str.c_str(), sizeof(cell_buf) - 1);
+                        cell_buf[sizeof(cell_buf) - 1] = '\0';
+
+                        size_t pos;
+                        pos = cell_str.find("RSRP=");
+                        if (pos != string::npos)
+                            sscanf(cell_str.c_str() + pos, "RSRP=%lf", &rsrp);
+
+                        pos = cell_str.find("RSSI=");
+                        if (pos != string::npos)
+                            sscanf(cell_str.c_str() + pos, "RSSI=%lf", &rssi);
+
+                        pos = cell_str.find("RSRQ=");
+                        if (pos != string::npos)
+                            sscanf(cell_str.c_str() + pos, "RSRQ=%lf", &rsrq);
+                    }
+                    if (rsrq > 1000)
+                        rsrq = 0;
+                    if (rssi > 1000)
+                        rssi = 0;
+                    cout << "DEBUG SIGNAL: " << "RSRP=" << rsrp << " RSSI=" << rssi << " RSRQ=" << rsrq << endl;
+
+                    if (traf_pos != string::npos)
+                    {
+                        sscanf(data.c_str() + traf_pos + 8, "%lld,%lld", &tx, &rx);
+                    }
+
+                    if (top_pos != string::npos)
+                    {
+                        size_t start = top_pos + 9;
+                        size_t end = data.find(";", start);
+                        if (end == string::npos)
+                            end = data.size();
+                        string top_str = data.substr(start, end - start);
+                        strncpy(top_buf, top_str.c_str(), sizeof(top_buf) - 1);
+                        top_buf[sizeof(top_buf) - 1] = '\0';
+                    }
+
+                    {
+                        lock_guard<mutex> lock(*mtx);
+                        if (rsrp != 0 || rssi != 0 || rsrq != 0)
+                        {
+                            static double last_rsrp = 0, last_rssi = 0, last_rsrq = 0;
+
+                            if (last_rsrp != 0)
+                            {
+                                rsrp = 0.7 * last_rsrp + 0.3 * rsrp;
+                                rssi = 0.7 * last_rssi + 0.3 * rssi;
+                                rsrq = 0.7 * last_rsrq + 0.3 * rsrq;
+                            }
+
+                            last_rsrp = rsrp;
+                            last_rssi = rssi;
+                            last_rsrq = rsrq;
+
+                            static double last_time = 0;
+                            double current_time = ((double)SDL_GetTicks() / 1000.0) - server_start_time;
+                            if (current_time - last_time > 0.5)
+                            {
+                                signal_history.push_back({current_time, rsrp, rssi, rsrq});
+                                last_time = current_time;
+
+                                while (signal_history.size() > MAX_HISTORY)
+                                    signal_history.pop_front();
+                            }
+
+                            cout << "History size: " << signal_history.size() << endl;
+                        }
+                        dev_data->lat = lat;
+                        dev_data->lon = lon;
+                        dev_data->alt = alt;
+                        dev_data->time = time;
+                        dev_data->accuracy = accuracy;
+                        dev_data->cell_info = cell_buf;
+                        dev_data->tx_bytes = tx;
+                        dev_data->rx_bytes = rx;
+                        dev_data->top_apps = top_buf;
+                    }
+                }
             }
             /*
             F << "  {\"id\":" << c << ",\"data\":\"" << data << "\"},\n";
@@ -147,7 +218,6 @@ void zmq_server(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
             socket.send(zmq::buffer(reply), zmq::send_flags::none);
         }
     }
-    }
     catch (const zmq::error_t &e)
     {
         cerr << "ZMQ ошибка: " << e.what() << endl;
@@ -160,11 +230,13 @@ void zmq_server(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
     F.close();
 }
 
-vector<string> split_string(const string& s, char delimiter) {
+vector<string> split_string(const string &s, char delimiter)
+{
     vector<string> tokens;
     string token;
     istringstream tokenStream(s);
-    while (getline(tokenStream, token, delimiter)) {
+    while (getline(tokenStream, token, delimiter))
+    {
         tokens.push_back(token);
     }
     return tokens;
@@ -173,6 +245,7 @@ vector<string> split_string(const string& s, char delimiter) {
 void run_gui(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
 {
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+    server_start_time = (double)SDL_GetTicks() / 1000.0;
     SDL_Window *window = SDL_CreateWindow(
         "Location Server", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         900, 700, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
@@ -205,14 +278,14 @@ void run_gui(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
         ImGui::NewFrame();
 
         ImGui::Begin("Phone Data");
-        
+
         DeviceData current;
         {
             lock_guard<mutex> lock(*mtx);
             current = *dev_data;
         }
 
-        ImGui::TextColored(ImVec4(1,1,0,1), "Geolocation:");
+        ImGui::TextColored(ImVec4(1, 1, 0, 1), "Geolocation:");
         ImGui::Text("Latitude:   %.6f", current.lat);
         ImGui::Text("Longitude:  %.6f", current.lon);
         ImGui::Text("Altitude:   %.2f m", current.alt);
@@ -220,17 +293,60 @@ void run_gui(/*location *loc*/ DeviceData *dev_data, mutex *mtx)
         ImGui::Text("Accuracy:   %.2f m", current.accuracy);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0,1,1,1), "Network Info:");
+        ImGui::TextColored(ImVec4(0, 1, 1, 1), "Network Info:");
         ImGui::TextWrapped("%s", current.cell_info.c_str());
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(1,0.5,0,1), "TRAFFIC");
+        ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "TRAFFIC");
         ImGui::Text("TX bytes: %lld", current.tx_bytes);
         ImGui::Text("RX bytes: %lld", current.rx_bytes);
 
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.8,0.8,0.2,1), "TOP APPS");
+        ImGui::TextColored(ImVec4(0.8, 0.8, 0.2, 1), "TOP APPS");
         ImGui::TextWrapped("%s", current.top_apps.c_str());
+
+        ImGui::End();
+
+        ImGui::Begin("Signal Strength");
+        vector<double> t;
+        vector<double> rsrp_v;
+        vector<double> rssi_v;
+        vector<double> rsrq_v;
+
+        {
+            lock_guard<mutex> lock(*mtx);
+
+            for (auto &p : signal_history)
+            {
+                t.push_back(p.time);
+                rsrp_v.push_back(p.rsrp);
+                rssi_v.push_back(p.rssi);
+                rsrq_v.push_back(p.rsrq);
+            }
+        }
+
+        if (ImPlot::BeginPlot("Cell Signal", ImVec2(-1, -1)))
+        {
+
+            ImPlot::SetupAxes("Time (s)", "dBm");
+            ImPlot::SetupAxisLimits(ImAxis_Y1, -140, 0, ImGuiCond_Always);
+
+            if (!t.empty())
+            {
+                double t_now = t.back();
+                double window = 20.0;
+
+                ImPlot::SetupAxisLimits(ImAxis_X1, t_now - window, t_now, ImGuiCond_Always);
+                ImPlot::SetNextLineStyle(ImVec4(0, 1, 0, 1));
+                ImPlot::PlotLine("RSRP", t.data(), rsrp_v.data(), t.size());
+                ImPlot::SetNextLineStyle(ImVec4(1, 0.5, 0, 1));
+                ImPlot::PlotLine("RSSI", t.data(), rssi_v.data(), t.size());
+                ImPlot::SetNextLineStyle(ImVec4(0, 0.5, 1, 1));
+                ImPlot::PlotLine("RSRQ", t.data(), rsrq_v.data(), t.size());
+            }
+
+            ImPlot::EndPlot();
+        }
 
         ImGui::End();
 
@@ -255,7 +371,7 @@ int main(int argc, char *argv[])
 {
     cout << "Запуск сервера..." << endl;
 
-    //location loc;
+    // location loc;
     DeviceData dev_data;
     mutex mtx;
 
