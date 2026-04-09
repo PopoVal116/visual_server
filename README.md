@@ -31,7 +31,7 @@
 ## Сборка и запуск
 
 ```bash
-# Клонирование с субмодулями (обязательно!)
+# Клонирование с субмодулями
 git clone --recursive https://github.com/PopoVal116/visual_server.git
 cd visual_server
 ```
