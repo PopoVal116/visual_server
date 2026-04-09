@@ -15,6 +15,7 @@ find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ZMQ REQUIRED libzmq)
+find_package(PostgreSQL REQUIRED)
 
 include_directories(${INCLUDE_DIR} ${ZMQ_INCLUDE_DIRS} ${SDL2_INCLUDE_DIRS})
 
@@ -48,6 +49,7 @@ target_link_libraries(server PRIVATE
     ${SDL2_LIBRARIES} 
     ${OPENGL_LIBRARIES} 
     ${GLEW_LIBRARIES}
+    PostgreSQL::PostgreSQL
     pthread
     dl 
 )
