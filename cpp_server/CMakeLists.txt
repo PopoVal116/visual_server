@@ -14,6 +14,8 @@ find_package(PostgreSQL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ZMQ REQUIRED libzmq)
+pkg_check_modules(CURL REQUIRED libcurl)
+pkg_check_modules(STB REQUIRED stb)
 
 include_directories(
     ${INCLUDE_DIR}
@@ -21,6 +23,7 @@ include_directories(
     ${SDL2_INCLUDE_DIRS}
     ${GLEW_INCLUDE_DIRS}
     ${PostgreSQL_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
 )
 
 add_library(imgui STATIC
@@ -36,6 +39,7 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC 
     ${THIRD_PARTY_DIR}/imgui 
     ${THIRD_PARTY_DIR}/imgui/backends
+    ${STB_INCLUDE_DIRS}
 )
 target_compile_options(imgui PRIVATE -fPIC)
 
@@ -54,6 +58,8 @@ add_executable(server
     ${SRC_DIR}/database.cpp
     ${SRC_DIR}/server.cpp
     ${SRC_DIR}/gui.cpp
+     ${SRC_DIR}/map.cpp
+
 )
 
 target_link_libraries(server PRIVATE 
@@ -65,6 +71,8 @@ target_link_libraries(server PRIVATE
     PostgreSQL::PostgreSQL
     pthread
     dl 
+    ${CURL_LIBRARIES}
+    ${STB_LIBRARIES}
 )
 
 set(CMAKE_BUILD_TYPE Debug)

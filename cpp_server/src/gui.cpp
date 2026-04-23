@@ -8,11 +8,14 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include "map.h"
+#include <curl/curl.h>
 
 using namespace std;
 
 void run_gui(DeviceData *dev_data, mutex *mtx)
 {
+    curl_global_init(CURL_GLOBAL_DEFAULT);
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     server_start_time = (double)SDL_GetTicks() / 1000.0;
 
@@ -30,6 +33,7 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
 
     ImGui::CreateContext();
     ImPlot::CreateContext();
+    StartWorker();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
@@ -50,6 +54,8 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
+
+        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Phone Data");
         DeviceData current;
@@ -237,6 +243,39 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
                     ImPlot::EndPlot();
                 }
             }
+        }
+        ImGui::End();
+
+        ImGui::Begin("Map");
+
+        double centerX = current.lon;
+        double centerY = LatToMercatorY(current.lat);
+        static bool followDevice = true;
+
+        if (ImGui::Button("Follow device"))
+            followDevice = true;
+
+        if (ImPlot::BeginPlot("##Map", ImVec2(-1, -1), ImPlotFlags_Crosshairs | ImPlotFlags_Equal))
+        {
+            static bool firstFrame = true;
+            if (firstFrame && (current.lat != 0 || current.lon != 0))
+            {
+                ImPlot::SetupAxisLimits(ImAxis_X1, centerX - 10.0, centerX + 10.0, ImGuiCond_Once);
+                ImPlot::SetupAxisLimits(ImAxis_Y1, centerY - 10.0, centerY + 10.0, ImGuiCond_Once);
+                firstFrame = false;
+            }
+
+            ImPlot::SetupAxis(ImAxis_X1, "Longitude");
+            ImPlot::SetupAxis(ImAxis_Y1, "Latitude");
+
+            RenderMap();
+
+            double x = current.lon;
+            double y = LatToMercatorY(current.lat);
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 8, ImVec4(1, 0, 0, 1));
+            ImPlot::PlotScatter("Device", &x, &y, 1);
+
+            ImPlot::EndPlot();
         }
 
         ImGui::End();

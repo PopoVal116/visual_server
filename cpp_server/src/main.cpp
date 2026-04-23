@@ -5,6 +5,7 @@
 #include "server.h"
 #include "gui.h"
 #include "common.h"
+#include <curl/curl.h>
 
 using namespace std;
 
@@ -29,6 +30,8 @@ int main()
 
     if (conn)
         PQfinish(conn);
+
+    curl_global_cleanup();
 
     cout << "Сервер завершил работу." << endl;
     return 0;
