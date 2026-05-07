@@ -255,7 +255,7 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         if (ImGui::Button("Follow device"))
             followDevice = true;
 
-        if (ImPlot::BeginPlot("##Map", ImVec2(-1, -1), ImPlotFlags_Crosshairs | ImPlotFlags_Equal))
+        if (ImPlot::BeginPlot("##Map", ImVec2(-1, -1), ImPlotFlags_Equal))
         {
             static bool firstFrame = true;
             if (firstFrame && (current.lat != 0 || current.lon != 0))

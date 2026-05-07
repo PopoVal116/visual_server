@@ -97,18 +97,31 @@ void EnqueueTile(const string &tileId, int zoom, int x, int y)
 
 void FetchWorker()
 {
+    CURL *curl = curl_easy_init();
     while (true)
     {
+        bool needSleep = false;
         TileJob job;
         {
-            lock_guard<mutex> lock(g_JobMutex);
-            if (g_JobQueue.empty())
             {
-                this_thread::sleep_for(chrono::milliseconds(100));
+                lock_guard<mutex> lock(g_JobMutex);
+
+                if (g_JobQueue.empty())
+                {
+                    needSleep = true;
+                }
+                else
+                {
+                    job = g_JobQueue.front();
+                    g_JobQueue.pop();
+                }
+            }
+
+            if (needSleep)
+            {
+                this_thread::sleep_for(chrono::milliseconds(10));
                 continue;
             }
-            job = g_JobQueue.front();
-            g_JobQueue.pop();
         }
 
         string url = "https://tile.openstreetmap.org/" +
@@ -117,7 +130,7 @@ void FetchWorker()
                      to_string(job.y) + ".png";
 
         vector<uint8_t> pngData;
-        CURL *curl = curl_easy_init();
+        // CURL *curl = curl_easy_init();
         if (curl)
         {
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -132,10 +145,8 @@ void FetchWorker()
             if (res != CURLE_OK)
             {
                 cout << "CURL error: " << curl_easy_strerror(res) << endl;
-                curl_easy_cleanup(curl);
                 continue;
             }
-            curl_easy_cleanup(curl);
         }
         else
         {
@@ -169,11 +180,13 @@ void FetchWorker()
             tex.isLoading = false;
         }
     }
+    curl_easy_cleanup(curl);
 }
 
 void StartWorker()
 {
-    thread(FetchWorker).detach();
+    for (int i = 0; i < 8; i++)
+        thread(FetchWorker).detach();
 }
 
 void RenderMap()
@@ -189,7 +202,7 @@ void RenderMap()
     if (newZoom != zoom)
     {
         zoom = newZoom;
-        ClearQueueAndReset();
+        // ClearQueueAndReset();
         cout << "Zoom changed to: " << zoom << endl;
     }
 
@@ -210,13 +223,14 @@ void RenderMap()
             if (tex.id != 0)
                 texCount++;
         }
-        cout << "Textures created: " << texCount << endl;
     }
 
-    for (int x = minX; x <= maxX; ++x)
+    for (int x = minX - 1; x <= maxX + 1; ++x)
     {
-        for (int y = minY; y <= maxY; ++y)
+        for (int y = minY - 1; y <= maxY + 1; ++y)
         {
+            if (x < 0 || y < 0 || x >= (1 << zoom) || y >= (1 << zoom))
+                continue;
             string tileId = to_string(zoom) + "/" + to_string(x) + "/" + to_string(y);
 
             unique_lock<mutex> lock(g_CacheMutex);
@@ -235,14 +249,15 @@ void RenderMap()
                     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex.width, tex.height, 0,
                                  GL_RGBA, GL_UNSIGNED_BYTE, tex.rgbaBlob.data());
                     tex.rgbaBlob.clear();
+                    lock.unlock();
                     cout << "Texture created, id=" << tex.id << endl;
                 }
             }
 
             if (tex.id == 0 && !tex.isLoading)
             {
-
                 lock.unlock();
+                EnqueueTile(tileId, zoom, x, y);
                 continue;
             }
             if (tex.id != 0)
