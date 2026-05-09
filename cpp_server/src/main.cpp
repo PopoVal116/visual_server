@@ -6,6 +6,7 @@
 #include "gui.h"
 #include "common.h"
 #include <curl/curl.h>
+#include "data_loader.h"
 
 using namespace std;
 
@@ -18,7 +19,8 @@ int main()
         cerr << "Не удалось подключиться к базе данных. Выход." << endl;
         return 1;
     }
-
+    g_Measurements = LoadMeasurements("data_v.json");
+    cout << "Загружено " << g_Measurements.size() << " исторических точек измерений.\n";
     DeviceData dev_data;
     mutex mtx;
 

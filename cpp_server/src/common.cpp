@@ -24,3 +24,5 @@ std::vector<std::string> split_string(const std::string &s, char delimiter)
         tokens.push_back(token);
     return tokens;
 }
+
+std::vector<MeasurementPoint> g_Measurements;

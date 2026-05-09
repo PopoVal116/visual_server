@@ -25,6 +25,24 @@ struct SignalPoint
     double sinr = 0.0;
 };
 
+struct MeasurementPoint
+{
+    double lat = 0.0;
+    double lon = 0.0;
+    double altitude = 0.0;
+
+    double rsrp = -140.0;
+    double rsrq = -30.0;
+    double rssi = -140.0;
+    double sinr = 0.0;
+
+    int earfcn = 0;
+    int pci = 0;
+    long long timestamp = 0;
+};
+
+extern std::vector<MeasurementPoint> g_Measurements;
+
 extern std::deque<SignalPoint> signal_history;
 
 std::vector<std::string> split_string(const std::string &s, char delimiter);

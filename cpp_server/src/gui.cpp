@@ -272,9 +272,27 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
 
             double x = current.lon;
             double y = LatToMercatorY(current.lat);
-            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 8, ImVec4(1, 0, 0, 1));
+            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3, ImVec4(1, 0, 0, 1));
             ImPlot::PlotScatter("Device", &x, &y, 1);
+            if (!g_Measurements.empty())
+            {
+                static std::vector<double> xs, ys;
+                xs.clear();
+                ys.clear();
+                xs.reserve(g_Measurements.size());
+                ys.reserve(g_Measurements.size());
 
+                for (const auto &p : g_Measurements)
+                {
+                    xs.push_back(p.lon);
+                    ys.push_back(LatToMercatorY(p.lat));
+                }
+
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 4.5f,
+                                           ImVec4(0.0f, 0.9f, 0.2f, 0.85f));
+
+                ImPlot::PlotScatter("Measurements", xs.data(), ys.data(), (int)xs.size());
+            }
             ImPlot::EndPlot();
         }
 

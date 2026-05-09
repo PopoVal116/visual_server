@@ -59,6 +59,7 @@ add_executable(server
     ${SRC_DIR}/server.cpp
     ${SRC_DIR}/gui.cpp
      ${SRC_DIR}/map.cpp
+    ${SRC_DIR}/data_loader.cpp
 
 )
 
