@@ -22,6 +22,7 @@ double g_HeatmapBounds[4] = {0};
 static bool g_HeatmapGenerated = false;
 static bool g_HeatmapLoading = false;
 static thread g_HeatmapThread;
+extern int g_HeatmapMetric;
 
 Color GetRSRPColor(double rsrp);
 double ComputeIDW(double lat, double lon, const vector<MeasurementPoint> &points);
@@ -31,7 +32,7 @@ void GenerateHeatmapAsync(const vector<MeasurementPoint> &measurements)
     g_HeatmapLoading = true;
     cout << "Запуск генерации тепловой карты...\n";
 
-    GenerateHeatmap(measurements, "heatmap.png");
+    GenerateHeatmap(measurements, "heatmap.png", g_HeatmapMetric);
 
     g_HeatmapGenerated = true;
     g_HeatmapLoading = false;
@@ -311,7 +312,6 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
             }
         }
         ImGui::End();
-
         ImGui::Begin("Map");
         if (g_HeatmapLoading)
         {
@@ -321,14 +321,54 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         ImGui::Checkbox("Show Heatmap", &showHeatmap);
         ImGui::SameLine();
 
-        if (ImGui::Button("Regenerate Heatmap") && !g_HeatmapLoading)
+        const char *metricNames[] = {"RSRP", "RSRQ", "RSSI", "Altitude"};
+        if (ImGui::Combo("Metric", &g_HeatmapMetric, metricNames, IM_ARRAYSIZE(metricNames)))
         {
-            if (g_HeatmapThread.joinable())
-                g_HeatmapThread.join();
-            g_HeatmapGenerated = false;
-            g_HeatmapTexture = 0;
-            g_HeatmapThread = thread(GenerateHeatmapAsync, g_Measurements);
+            if (!g_HeatmapLoading)
+            {
+                if (g_HeatmapThread.joinable())
+                    g_HeatmapThread.join();
+                g_HeatmapGenerated = false;
+                g_HeatmapTexture = 0;
+                g_HeatmapThread = thread(GenerateHeatmapAsync, g_Measurements);
+            }
         }
+
+        ImGui::Separator();
+        ImGui::Text("Legend:");
+
+        if (g_HeatmapMetric == 0)
+        {
+            ImGui::TextColored(ImVec4(0, 1, 0, 1), "(>= -80)");
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "(-80 to -90)");
+            ImGui::TextColored(ImVec4(1, 0.65f, 0, 1), "(-90 to -100)");
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "(<-100)");
+            ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.4f, 1), "Very Weak");
+        }
+        else if (g_HeatmapMetric == 1)
+        {
+            ImGui::TextColored(ImVec4(0, 1, 0, 1), "(>= -10)");
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "(-10 to -15)");
+            ImGui::TextColored(ImVec4(1, 0.65f, 0, 1), "(-15 to -20)");
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "(<-20)");
+        }
+        else if (g_HeatmapMetric == 2)
+        {
+            ImGui::TextColored(ImVec4(0, 1, 0, 1), "(>= -65)");
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "(-65 to -75)");
+            ImGui::TextColored(ImVec4(1, 0.65f, 0, 1), "(-75 to -85)");
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "(<-85)");
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0, 0.7f, 0, 1), "(<= 200m)");
+            ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "(200-500m)");
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "(500-800m)");
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "(>800m)");
+        }
+        ImGui::Separator();
+
+        ImGui::SameLine();
 
         double centerX = current.lon;
         double centerY = LatToMercatorY(current.lat);

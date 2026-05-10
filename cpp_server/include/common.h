@@ -6,6 +6,7 @@
 
 extern double server_start_time;
 constexpr size_t MAX_HISTORY = 300;
+extern int g_HeatmapMetric;
 
 struct DeviceData
 {

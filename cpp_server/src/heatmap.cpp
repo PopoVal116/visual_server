@@ -10,73 +10,90 @@
 
 using namespace std;
 
-Color gradientColor(Color c1, Color c2, double ratio)
+/*Color gradientColor(Color c1, Color c2, double ratio)
 {
     return {
         static_cast<int>(c1.r + (c2.r - c1.r) * ratio),
         static_cast<int>(c1.g + (c2.g - c1.g) * ratio),
         static_cast<int>(c1.b + (c2.b - c1.b) * ratio),
         static_cast<int>(c1.a + (c2.a - c1.a) * ratio)};
-}
+}*/
 
-Color GetRSRPColor(double rsrp)
+double GetMeasurementValue(const MeasurementPoint &p, int metric)
 {
-    if (rsrp >= -80)
-        return {0, 255, 0, 180};
-
-    if (rsrp >= -90)
-        return {255, 255, 0, 180};
-
-    if (rsrp >= -100)
-        return {255, 165, 0, 180};
-
-    if (rsrp > -115)
-        return {255, 0, 0, 180};
-
-    return {100, 100, 100, 100};
-}
-
-double ComputeIDW(
-    double lat,
-    double lon,
-    const vector<MeasurementPoint> &points)
-{
-    double weightedSum = 0.0;
-    double weightTotal = 0.0;
-
-    const double power = 2.0;
-    const double maxDistanceDeg = 0.0003;
-
-    for (const auto &p : points)
+    switch (metric)
     {
-        double dx = lat - p.lat;
-        double dy = lon - p.lon;
-
-        double dist = sqrt(dx * dx + dy * dy);
-
-        if (dist > maxDistanceDeg)
-            continue;
-
-        if (dist < 0.00001)
-            dist = 0.00001;
-
-        double value = p.rsrp;
-
-        if (value < -120 || value > -40)
-            continue;
-        double weight = 1.0 / pow(dist, power);
-
-        weightedSum += value * weight;
-        weightTotal += weight;
+    case 0:
+        return p.rsrp;
+    case 1:
+        return p.rsrq;
+    case 2:
+        return p.rssi;
+    case 3:
+        return p.altitude;
+    default:
+        return p.rsrp;
     }
-
-    if (weightTotal == 0.0)
-        return -140;
-
-    return weightedSum / weightTotal;
 }
 
-void GenerateHeatmap(const vector<MeasurementPoint> &points, const string &outputFile)
+Color GetSignalColor(double value, int metric)
+{
+    if (metric == 0)
+    {
+        if (value >= -80)
+            return {0, 255, 0, 235};
+        if (value >= -90)
+            return {255, 255, 0, 235};
+        if (value >= -100)
+            return {255, 165, 0, 235};
+        if (value > -115)
+            return {255, 0, 0, 235};
+        return {100, 100, 100, 100};
+    }
+    else if (metric == 1)
+    {
+        if (value >= -10)
+            return {0, 255, 0, 235};
+        if (value >= -15)
+            return {255, 255, 0, 235};
+        if (value >= -20)
+            return {255, 165, 0, 235};
+        if (value >= -25)
+            return {255, 0, 0, 235};
+        return {100, 100, 100, 100};
+    }
+    else if (metric == 2)
+    {
+        if (value >= -65)
+            return {0, 255, 0, 235};
+        if (value >= -75)
+            return {255, 255, 0, 235};
+        if (value >= -85)
+            return {255, 165, 0, 235};
+        if (value >= -95)
+            return {255, 0, 0, 235};
+        return {100, 100, 100, 100};
+    }
+    else
+    {
+        if (value < 0 || value > 3000)
+            return {100, 100, 100, 100};
+
+        if (value <= 200)
+            return {0, 180, 0, 230};
+        if (value <= 500)
+            return {80, 255, 80, 230};
+        if (value <= 800)
+            return {255, 255, 0, 230};
+        if (value <= 1200)
+            return {205, 130, 0, 235};
+        return {139, 69, 19, 240};
+    }
+}
+
+void GenerateHeatmap(const vector<MeasurementPoint> &points,
+                     const string &outputFile,
+                     int metric)
 {
     if (points.empty())
         return;
@@ -112,7 +129,7 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points, const string &outpu
     const double power = 2.4;
     const double maxDistDeg = 0.0022;
 
-    cout << "Генерация тепловой карты...\n";
+    cout << "Генерация тепловой карты (Metric = " << metric << ")...\n";
 
     for (int y = 0; y < height; y++)
     {
@@ -136,29 +153,15 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points, const string &outpu
                 if (dist > maxDistDeg)
                     continue;
 
+                double val = GetMeasurementValue(p, metric);
                 double weight = 1.0 / pow(dist + 0.00001, power);
-                weightedSum += p.rsrp * weight;
+
+                weightedSum += val * weight;
                 weightTotal += weight;
             }
 
-            double rsrp = (weightTotal > 1e-8) ? weightedSum / weightTotal : -140.0;
-
-            Color c = GetRSRPColor(rsrp);
-
-            if (rsrp > -82)
-                c.a = 255;
-            else if (rsrp > -88)
-                c.a = 252;
-            else if (rsrp > -94)
-                c.a = 240;
-            else if (rsrp > -100)
-                c.a = 215;
-            else if (rsrp > -107)
-                c.a = 175;
-            else if (rsrp > -114)
-                c.a = 130;
-            else
-                c.a = 70;
+            double value = (weightTotal > 1e-8) ? weightedSum / weightTotal : -140.0;
+            Color c = GetSignalColor(value, metric);
 
             int idx = (y * width + x) * 4;
             image[idx + 0] = c.r;
@@ -178,15 +181,15 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points, const string &outpu
                 int idx = (py * width + px) * 4;
                 for (int c = 0; c < 4; c++)
                 {
-                    int s = src[((py - 1) * width + (px - 1)) * 4 + c] * 1 +
+                    int s = src[((py - 1) * width + (px - 1)) * 4 + c] +
                             src[((py - 1) * width + px) * 4 + c] * 2 +
-                            src[((py - 1) * width + (px + 1)) * 4 + c] * 1 +
+                            src[((py - 1) * width + (px + 1)) * 4 + c] +
                             src[(py * width + (px - 1)) * 4 + c] * 2 +
                             src[idx + c] * 4 +
                             src[(py * width + (px + 1)) * 4 + c] * 2 +
-                            src[((py + 1) * width + (px - 1)) * 4 + c] * 1 +
+                            src[((py + 1) * width + (px - 1)) * 4 + c] +
                             src[((py + 1) * width + px) * 4 + c] * 2 +
-                            src[((py + 1) * width + (px + 1)) * 4 + c] * 1;
+                            src[((py + 1) * width + (px + 1)) * 4 + c];
                     dst[idx + c] = s / 16;
                 }
             }
@@ -198,65 +201,4 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points, const string &outpu
 
     stbi_write_png(outputFile.c_str(), width, height, 4, blurred.data(), width * 4);
     cout << "Heatmap успешно сохранена!\n";
-}
-
-unsigned int
-GenerateHeatmapTexture(
-    const vector<MeasurementPoint> &points,
-    int width, int height)
-{
-    if (points.empty())
-        return 0;
-    double minLat = 999, maxLat = -999;
-    double minLon = 999, maxLon = -999;
-
-    for (const auto &p : points)
-    {
-        minLat = min(minLat, p.lat);
-        maxLat = max(maxLat, p.lat);
-        minLon = min(minLon, p.lon);
-        maxLon = max(maxLon, p.lon);
-    }
-
-    double latMargin = (maxLat - minLat) * 0.1;
-    double lonMargin = (maxLon - minLon) * 0.1;
-    minLat -= latMargin;
-    maxLat += latMargin;
-    minLon -= lonMargin;
-    maxLon += lonMargin;
-
-    vector<unsigned char> image(width * height * 4);
-
-    for (int y = 0; y < height; y++)
-    {
-        for (int x = 0; x < width; x++)
-        {
-            double lon = minLon + (x / (double)width) * (maxLon - minLon);
-            double lat = maxLat - (y / (double)height) * (maxLat - minLat);
-
-            double rsrp = ComputeIDW(lat, lon, points);
-            Color c = GetRSRPColor(rsrp);
-
-            int idx = (y * width + x) * 4;
-            image[idx + 0] = c.r;
-            image[idx + 1] = c.g;
-            image[idx + 2] = c.b;
-            image[idx + 3] = c.a;
-        }
-    }
-
-    GLuint textureId;
-    glGenTextures(1, &textureId);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, image.data());
-
-    stbi_write_png("heatmap.png", width, height, 4, image.data(), width * 4);
-    cout << "Heatmap texture created and saved as heatmap.png" << endl;
-
-    return textureId;
 }
