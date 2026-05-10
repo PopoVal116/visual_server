@@ -61,17 +61,59 @@ vector<MeasurementPoint> LoadMeasurements(const string &filename)
                         m.rssi = -140;
                         m.earfcn = 0;
 
-                        if (j.contains("cell") &&
-                            j["cell"].is_array() &&
-                            !j["cell"].empty())
+                        if (j.contains("cell"))
                         {
-                            auto &cell = j["cell"][0];
 
-                            m.rsrp = cell.value("rsrp", -140);
-                            m.rsrq = cell.value("rsrq", -30);
-                            m.rssi = cell.value("rssi", -140);
-                            m.earfcn = cell.value("earfcn", 0);
+                            if (j["cell"].is_array() && !j["cell"].empty())
+                            {
+                                auto &cell = j["cell"][0];
+
+                                m.rsrp = cell.value("rsrp", -140);
+                                m.rsrq = cell.value("rsrq", -30);
+                                m.rssi = cell.value("rssi", -140);
+                                m.sinr = cell.value("sinr", 0.0);
+
+                                m.earfcn = cell.value("earfcn", 0);
+                                m.pci = cell.value("pci", 0);
+                            }
+
+                            else if (j["cell"].is_string())
+                            {
+                                string cellStr = j["cell"];
+
+                                auto extractValue = [&](const string &key, double defaultVal)
+                                {
+                                    size_t pos = cellStr.find(key + "=");
+
+                                    if (pos == string::npos)
+                                        return defaultVal;
+
+                                    pos += key.size() + 1;
+
+                                    size_t end = cellStr.find_first_of(" }", pos);
+
+                                    string val = cellStr.substr(pos, end - pos);
+
+                                    try
+                                    {
+                                        return stod(val);
+                                    }
+                                    catch (...)
+                                    {
+                                        return defaultVal;
+                                    }
+                                };
+
+                                m.rsrp = extractValue("rsrp", -140);
+                                m.rsrq = extractValue("rsrq", -30);
+                                m.rssi = extractValue("rssi", -140);
+                            }
                         }
+                        if (m.lat == 0.0 || m.lon == 0.0)
+                            continue;
+
+                        if (m.rsrp < -120 || m.rsrp > -40)
+                            continue;
 
                         result.push_back(m);
                     }

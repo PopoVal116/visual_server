@@ -1,5 +1,5 @@
 #include "common.h"
-
+int g_HeatmapMetric = 0;
 double server_start_time = 0.0;
 std::deque<SignalPoint> signal_history;
 

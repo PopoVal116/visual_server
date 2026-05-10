@@ -46,3 +46,4 @@ extern std::vector<MeasurementPoint> g_Measurements;
 extern std::deque<SignalPoint> signal_history;
 
 std::vector<std::string> split_string(const std::string &s, char delimiter);
+extern double g_HeatmapBounds[4];

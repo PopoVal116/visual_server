@@ -48,6 +48,11 @@ double LatToMercatorY(double lat)
     return log(tan(M_PI / 4.0 + rad / 2.0)) * 180.0 / M_PI;
 }
 
+double LonToMercatorX(double lon)
+{
+    return lon * 20037508.34 / 180.0;
+}
+
 int CalculateZoom(double minX, double maxX)
 {
     double diff = maxX - minX;

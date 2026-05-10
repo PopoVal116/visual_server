@@ -15,6 +15,7 @@ double MercatorYToTileY(double mercatorY, int zoom);
 double TileXToMercatorX(int tileX, int zoom);
 double TileYToMercatorY(int tileY, int zoom);
 double LatToMercatorY(double lat);
+double LonToMercatorX(double lon);
 
 struct TileJob
 {

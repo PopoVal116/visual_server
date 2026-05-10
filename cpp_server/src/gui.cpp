@@ -10,8 +10,64 @@
 #include <cmath>
 #include "map.h"
 #include <curl/curl.h>
+#include "heatmap.h"
+#include <iostream>
+#include <thread>
+#include <stb_image.h>
 
 using namespace std;
+
+static GLuint g_HeatmapTexture = 0;
+double g_HeatmapBounds[4] = {0};
+static bool g_HeatmapGenerated = false;
+static bool g_HeatmapLoading = false;
+static thread g_HeatmapThread;
+
+Color GetRSRPColor(double rsrp);
+double ComputeIDW(double lat, double lon, const vector<MeasurementPoint> &points);
+
+void GenerateHeatmapAsync(const vector<MeasurementPoint> &measurements)
+{
+    g_HeatmapLoading = true;
+    cout << "Запуск генерации тепловой карты...\n";
+
+    GenerateHeatmap(measurements, "heatmap.png");
+
+    g_HeatmapGenerated = true;
+    g_HeatmapLoading = false;
+
+    cout << "Генерация тепловой карты завершена.\n";
+}
+
+void LoadHeatmapTexture()
+{
+    if (g_HeatmapTexture != 0)
+    {
+        glDeleteTextures(1, &g_HeatmapTexture);
+        g_HeatmapTexture = 0;
+    }
+
+    int width, height, channels;
+    unsigned char *imageData = stbi_load("heatmap.png", &width, &height, &channels, 4);
+
+    if (imageData)
+    {
+        glGenTextures(1, &g_HeatmapTexture);
+        glBindTexture(GL_TEXTURE_2D, g_HeatmapTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, imageData);
+        stbi_image_free(imageData);
+        cout << "Heatmap texture loaded, id=" << g_HeatmapTexture << endl;
+    }
+    else
+    {
+        cout << "Failed to load heatmap.png" << endl;
+    }
+}
 
 void run_gui(DeviceData *dev_data, mutex *mtx)
 {
@@ -40,6 +96,13 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
 
+    if (!g_Measurements.empty() && !g_HeatmapGenerated && !g_HeatmapLoading)
+    {
+        cout << "Запуск генерации тепловой карты в фоновом потоке..." << endl;
+        g_HeatmapThread = thread(GenerateHeatmapAsync, g_Measurements);
+    }
+
+    bool showHeatmap = true;
     bool running = true;
     while (running)
     {
@@ -54,7 +117,10 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-
+        if (g_HeatmapGenerated && g_HeatmapTexture == 0)
+        {
+            LoadHeatmapTexture();
+        }
         ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Phone Data");
@@ -247,13 +313,25 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         ImGui::End();
 
         ImGui::Begin("Map");
+        if (g_HeatmapLoading)
+        {
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Generating heat map... Please wait");
+        }
+
+        ImGui::Checkbox("Show Heatmap", &showHeatmap);
+        ImGui::SameLine();
+
+        if (ImGui::Button("Regenerate Heatmap") && !g_HeatmapLoading)
+        {
+            if (g_HeatmapThread.joinable())
+                g_HeatmapThread.join();
+            g_HeatmapGenerated = false;
+            g_HeatmapTexture = 0;
+            g_HeatmapThread = thread(GenerateHeatmapAsync, g_Measurements);
+        }
 
         double centerX = current.lon;
         double centerY = LatToMercatorY(current.lat);
-        static bool followDevice = true;
-
-        if (ImGui::Button("Follow device"))
-            followDevice = true;
 
         if (ImPlot::BeginPlot("##Map", ImVec2(-1, -1), ImPlotFlags_Equal))
         {
@@ -269,11 +347,23 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
             ImPlot::SetupAxis(ImAxis_Y1, "Latitude");
 
             RenderMap();
+            if (showHeatmap && g_HeatmapTexture != 0)
+            {
+                ImPlotPoint minPoint{g_HeatmapBounds[0], LatToMercatorY(g_HeatmapBounds[2])};
+                ImPlotPoint maxPoint{g_HeatmapBounds[1], LatToMercatorY(g_HeatmapBounds[3])};
+
+                ImPlot::PlotImage("Heatmap",
+                                  (ImTextureID)(intptr_t)g_HeatmapTexture,
+                                  minPoint, maxPoint,
+                                  ImVec2(0, 0), ImVec2(1, 1),
+                                  ImVec4(1, 1, 1, 0.93f));
+            }
 
             double x = current.lon;
             double y = LatToMercatorY(current.lat);
             ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 3, ImVec4(1, 0, 0, 1));
             ImPlot::PlotScatter("Device", &x, &y, 1);
+
             if (!g_Measurements.empty())
             {
                 static std::vector<double> xs, ys;
@@ -288,8 +378,8 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
                     ys.push_back(LatToMercatorY(p.lat));
                 }
 
-                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 4.5f,
-                                           ImVec4(0.0f, 0.9f, 0.2f, 0.85f));
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 1.5f,
+                                           ImVec4(0.7f, 0.7f, 0.7f, 0.65f));
 
                 ImPlot::PlotScatter("Measurements", xs.data(), ys.data(), (int)xs.size());
             }
@@ -302,6 +392,13 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
+    }
+    if (g_HeatmapThread.joinable())
+        g_HeatmapThread.join();
+
+    if (g_HeatmapTexture != 0)
+    {
+        glDeleteTextures(1, &g_HeatmapTexture);
     }
 
     ImGui_ImplOpenGL3_Shutdown();
