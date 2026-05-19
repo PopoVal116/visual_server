@@ -67,9 +67,6 @@ void save_cell_to_db(int pci, double rsrp, double rssi, double rsrq, double sinr
     }
     else
     {
-        std::cout << "Сохранено в БД: PCI=" << pci
-                  << " RSRP=" << rsrp << " RSSI=" << rssi
-                  << " RSRQ=" << rsrq << " SINR=" << sinr << std::endl;
         PQclear(res);
     }
 }

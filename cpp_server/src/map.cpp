@@ -135,7 +135,6 @@ void FetchWorker()
                      to_string(job.y) + ".png";
 
         vector<uint8_t> pngData;
-        // CURL *curl = curl_easy_init();
         if (curl)
         {
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -207,8 +206,7 @@ void RenderMap()
     if (newZoom != zoom)
     {
         zoom = newZoom;
-        // ClearQueueAndReset();
-        cout << "Zoom changed to: " << zoom << endl;
+        cout << "Зум: " << zoom << endl;
     }
 
     int minX = max(0, (int)floor(MercatorXToTileX(limits.X.Min, zoom)));
@@ -218,10 +216,6 @@ void RenderMap()
 
     if (frame % 60 == 0)
     {
-        cout << "=== Tile Debug ===" << endl;
-        cout << "Zoom: " << zoom << " Tiles: " << (maxX - minX + 1) * (maxY - minY + 1) << endl;
-        cout << "Cache size: " << g_TileCache.size() << endl;
-
         int texCount = 0;
         for (auto &[id, tex] : g_TileCache)
         {
@@ -243,7 +237,6 @@ void RenderMap()
 
             if (!tex.rgbaBlob.empty() && tex.id == 0)
             {
-                cout << "Creating texture for " << tileId << " (" << tex.width << "x" << tex.height << ")" << endl;
 
                 glGenTextures(1, &tex.id);
                 if (tex.id != 0)
@@ -255,7 +248,6 @@ void RenderMap()
                                  GL_RGBA, GL_UNSIGNED_BYTE, tex.rgbaBlob.data());
                     tex.rgbaBlob.clear();
                     lock.unlock();
-                    cout << "Texture created, id=" << tex.id << endl;
                 }
             }
 

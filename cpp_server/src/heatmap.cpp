@@ -10,15 +10,6 @@
 
 using namespace std;
 
-/*Color gradientColor(Color c1, Color c2, double ratio)
-{
-    return {
-        static_cast<int>(c1.r + (c2.r - c1.r) * ratio),
-        static_cast<int>(c1.g + (c2.g - c1.g) * ratio),
-        static_cast<int>(c1.b + (c2.b - c1.b) * ratio),
-        static_cast<int>(c1.a + (c2.a - c1.a) * ratio)};
-}*/
-
 double GetMeasurementValue(const MeasurementPoint &p, int metric)
 {
     switch (metric)
@@ -112,8 +103,8 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points,
         maxLon = max(maxLon, p.lon);
     }
 
-    double latMargin = (maxLat - minLat) * 0.38;
-    double lonMargin = (maxLon - minLon) * 0.38;
+    double latMargin = (maxLat - minLat) * 0.05;
+    double lonMargin = (maxLon - minLon) * 0.05;
 
     minLat -= latMargin;
     maxLat += latMargin;
@@ -129,17 +120,21 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points,
     const double power = 2.4;
     const double maxDistDeg = 0.0022;
 
-    cout << "Генерация тепловой карты (Metric = " << metric << ")...\n";
+    cout << "Генерация тепловой карты (Metric = " << metric << ")\n";
 
     for (int y = 0; y < height; y++)
     {
-        if (y % 100 == 0)
-            cout << "Progress: " << (y * 100 / height) << "%\n";
-
         for (int x = 0; x < width; x++)
         {
             double lon = minLon + (x / (double)width) * (maxLon - minLon);
-            double lat = maxLat - (y / (double)height) * (maxLat - minLat);
+            double mercMin = LatToMercatorY(minLat);
+            double mercMax = LatToMercatorY(maxLat);
+
+            double mercY =
+                mercMax - (y / (double)(height - 1)) * (mercMax - mercMin);
+
+            double lat =
+                atan(sinh(mercY * M_PI / 180.0)) * 180.0 / M_PI;
 
             double weightedSum = 0.0;
             double weightTotal = 0.0;
@@ -171,34 +166,5 @@ void GenerateHeatmap(const vector<MeasurementPoint> &points,
         }
     }
 
-    auto lightBlur = [&](const vector<unsigned char> &src)
-    {
-        vector<unsigned char> dst(width * height * 4, 0);
-        for (int py = 1; py < height - 1; py++)
-        {
-            for (int px = 1; px < width - 1; px++)
-            {
-                int idx = (py * width + px) * 4;
-                for (int c = 0; c < 4; c++)
-                {
-                    int s = src[((py - 1) * width + (px - 1)) * 4 + c] +
-                            src[((py - 1) * width + px) * 4 + c] * 2 +
-                            src[((py - 1) * width + (px + 1)) * 4 + c] +
-                            src[(py * width + (px - 1)) * 4 + c] * 2 +
-                            src[idx + c] * 4 +
-                            src[(py * width + (px + 1)) * 4 + c] * 2 +
-                            src[((py + 1) * width + (px - 1)) * 4 + c] +
-                            src[((py + 1) * width + px) * 4 + c] * 2 +
-                            src[((py + 1) * width + (px + 1)) * 4 + c];
-                    dst[idx + c] = s / 16;
-                }
-            }
-        }
-        return dst;
-    };
-
-    auto blurred = lightBlur(image);
-
-    stbi_write_png(outputFile.c_str(), width, height, 4, blurred.data(), width * 4);
-    cout << "Heatmap успешно сохранена!\n";
+    stbi_write_png(outputFile.c_str(), width, height, 4, image.data(), width * 4);
 }

@@ -128,8 +128,5 @@ vector<MeasurementPoint> LoadMeasurements(const string &filename)
             }
         }
     }
-
-    cout << "Loaded measurements: " << result.size() << endl;
-
     return result;
 }

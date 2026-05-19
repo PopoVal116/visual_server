@@ -30,14 +30,14 @@ double ComputeIDW(double lat, double lon, const vector<MeasurementPoint> &points
 void GenerateHeatmapAsync(const vector<MeasurementPoint> &measurements)
 {
     g_HeatmapLoading = true;
-    cout << "Запуск генерации тепловой карты...\n";
+    cout << "Запуск генерации тепловой карты\n";
 
     GenerateHeatmap(measurements, "heatmap.png", g_HeatmapMetric);
 
     g_HeatmapGenerated = true;
     g_HeatmapLoading = false;
 
-    cout << "Генерация тепловой карты завершена.\n";
+    cout << "Генерация тепловой карты завершена\n";
 }
 
 void LoadHeatmapTexture()
@@ -62,7 +62,6 @@ void LoadHeatmapTexture()
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, imageData);
         stbi_image_free(imageData);
-        cout << "Heatmap texture loaded, id=" << g_HeatmapTexture << endl;
     }
     else
     {
@@ -99,7 +98,6 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
 
     if (!g_Measurements.empty() && !g_HeatmapGenerated && !g_HeatmapLoading)
     {
-        cout << "Запуск генерации тепловой карты в фоновом потоке..." << endl;
         g_HeatmapThread = thread(GenerateHeatmapAsync, g_Measurements);
     }
 
@@ -160,7 +158,7 @@ void run_gui(DeviceData *dev_data, mutex *mtx)
 
         if (history_copy.empty())
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "Нет данных сигнала");
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f), "No signal data");
         }
         else
         {

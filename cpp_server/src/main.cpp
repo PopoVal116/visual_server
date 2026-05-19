@@ -12,15 +12,15 @@ using namespace std;
 
 int main()
 {
-    cout << "Запуск сервера..." << endl;
+    cout << "Запуск сервера" << endl;
 
     if (!connect_to_database())
     {
-        cerr << "Не удалось подключиться к базе данных. Выход." << endl;
+        cerr << "Не удалось подключиться к базе данных" << endl;
         return 1;
     }
     g_Measurements = LoadMeasurements("data_v.json");
-    cout << "Загружено " << g_Measurements.size() << " исторических точек измерений.\n";
+    cout << "Загружено " << g_Measurements.size() << " исторических точек измерений\n";
     DeviceData dev_data;
     mutex mtx;
 
@@ -35,6 +35,6 @@ int main()
 
     curl_global_cleanup();
 
-    cout << "Сервер завершил работу." << endl;
+    cout << "Сервер завершил работу" << endl;
     return 0;
 }
